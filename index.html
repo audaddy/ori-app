@@ -146,6 +146,21 @@
   .circ-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .circ-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
+  /* STATUS SETTER */
+  .status-setter { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 16px; }
+  .setter-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+  .setter-title { font-size: 13px; font-weight: 500; }
+  .setter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .setter-row input[type=text] { max-width: 200px; }
+  .status-btn { padding: 7px 16px; border-radius: var(--radius); font-size: 13px; cursor: pointer; border: 0.5px solid var(--border2); background: none; color: var(--text); transition: all 0.15s; font-family: var(--font); }
+  .status-btn.s-go-btn { border-color: var(--green); color: var(--green); }
+  .status-btn.s-go-btn:hover, .status-btn.s-go-btn.active { background: var(--green); color: var(--green-light); }
+  .status-btn.s-caution-btn { border-color: var(--amber); color: #854F0B; }
+  .status-btn.s-caution-btn:hover, .status-btn.s-caution-btn.active { background: var(--amber); color: #fff; }
+  .status-btn.s-nogo-btn { border-color: var(--red); color: var(--red); }
+  .status-btn.s-nogo-btn:hover, .status-btn.s-nogo-btn.active { background: var(--red); color: #fff; }
+  .setter-confirm { font-size: 12px; color: var(--green); margin-top: 8px; display: none; }
+
   /* CHAT */
   .chat-layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
   .chat-panel { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); display: flex; flex-direction: column; height: 560px; }
@@ -353,21 +368,26 @@
       <div class="circ-row"><div class="circ-dot" style="background:var(--amber)"></div><span style="font-size:13px;color:var(--text2)">Light exposure data recommended — connect Illuminating Readiness sensor for full circadian profile</span></div>
     </div>
 
+    <div class="status-setter full-col">
+      <div class="setter-hdr">
+        <span class="setter-title">Set My Status</span>
+        <span style="font-size:12px;color:var(--text2)">Saved to this browser — visible in the grid below</span>
+      </div>
+      <div class="setter-row">
+        <input type="text" id="setter-name" placeholder="Your callsign or name" style="max-width:200px" />
+        <button class="status-btn s-go-btn" onclick="setMyStatus('GO')">GO</button>
+        <button class="status-btn s-caution-btn" onclick="setMyStatus('CAUTION')">CAUTION</button>
+        <button class="status-btn s-nogo-btn" onclick="setMyStatus('NO-GO')">NO-GO</button>
+      </div>
+      <div class="setter-confirm" id="setter-confirm">Status saved.</div>
+    </div>
+
     <div class="metric-card full-col">
       <div class="metric-hdr" style="margin-bottom:14px">
         <span class="metric-name">Unit Readiness — Flight Alpha</span>
-        <span style="font-size:12px;color:var(--text2)">GO: 5 &nbsp;|&nbsp; CAUTION: 2 &nbsp;|&nbsp; NO-GO: 1</span>
+        <span style="font-size:12px;color:var(--text2)" id="unit-summary">GO: 5 &nbsp;|&nbsp; CAUTION: 2 &nbsp;|&nbsp; NO-GO: 1</span>
       </div>
-      <div class="unit-grid">
-        <div class="unit-card"><div class="unit-dot u-go">GO</div><div class="unit-name">Operator 01</div><div class="unit-status-text">GO</div></div>
-        <div class="unit-card"><div class="unit-dot u-go">GO</div><div class="unit-name">Operator 02</div><div class="unit-status-text">GO</div></div>
-        <div class="unit-card"><div class="unit-dot u-caution">!</div><div class="unit-name">Operator 03</div><div class="unit-status-text">CAUTION</div></div>
-        <div class="unit-card"><div class="unit-dot u-go">GO</div><div class="unit-name">Operator 04</div><div class="unit-status-text">GO</div></div>
-        <div class="unit-card"><div class="unit-dot u-nogo">✕</div><div class="unit-name">Operator 05</div><div class="unit-status-text">NO-GO</div></div>
-        <div class="unit-card"><div class="unit-dot u-go">GO</div><div class="unit-name">Operator 06</div><div class="unit-status-text">GO</div></div>
-        <div class="unit-card"><div class="unit-dot u-caution">!</div><div class="unit-name">Operator 07</div><div class="unit-status-text">CAUTION</div></div>
-        <div class="unit-card"><div class="unit-dot u-go">GO</div><div class="unit-name">Operator 08</div><div class="unit-status-text">GO</div></div>
-      </div>
+      <div class="unit-grid" id="unit-grid"></div>
     </div>
 
   </div>
@@ -610,8 +630,65 @@ async function sendChat() {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+// ─── UNIT STATUS ─────────────────────────────────────────────────────────────
+const DEFAULT_OPERATORS = [
+  { name: 'Operator 01', status: 'GO' },
+  { name: 'Operator 02', status: 'GO' },
+  { name: 'Operator 03', status: 'CAUTION' },
+  { name: 'Operator 04', status: 'GO' },
+  { name: 'Operator 05', status: 'NO-GO' },
+  { name: 'Operator 06', status: 'GO' },
+  { name: 'Operator 07', status: 'CAUTION' },
+  { name: 'Operator 08', status: 'GO' },
+];
+
+function loadUnitStatuses() {
+  try { return JSON.parse(localStorage.getItem('ori_unit_statuses')) || {}; } catch(e) { return {}; }
+}
+
+function saveUnitStatuses(overrides) {
+  localStorage.setItem('ori_unit_statuses', JSON.stringify(overrides));
+}
+
+function renderUnitGrid() {
+  const overrides = loadUnitStatuses();
+  const operators = DEFAULT_OPERATORS.map(op => ({
+    name: op.name,
+    status: overrides[op.name] || op.status
+  }));
+  Object.entries(overrides).forEach(([name, status]) => {
+    if (!operators.find(o => o.name === name)) operators.push({ name, status });
+  });
+  const dotMap = { 'GO': ['u-go','GO'], 'CAUTION': ['u-caution','!'], 'NO-GO': ['u-nogo','✕'] };
+  document.getElementById('unit-grid').innerHTML = operators.map(op => {
+    const [cls, sym] = dotMap[op.status] || dotMap['GO'];
+    return '<div class="unit-card"><div class="unit-dot ' + cls + '">' + sym + '</div><div class="unit-name">' + op.name + '</div><div class="unit-status-text">' + op.status + '</div></div>';
+  }).join('');
+  const counts = operators.reduce((acc, op) => { acc[op.status] = (acc[op.status] || 0) + 1; return acc; }, {});
+  document.getElementById('unit-summary').innerHTML =
+    'GO: ' + (counts['GO']||0) + ' &nbsp;|&nbsp; CAUTION: ' + (counts['CAUTION']||0) + ' &nbsp;|&nbsp; NO-GO: ' + (counts['NO-GO']||0);
+}
+
+function setMyStatus(status) {
+  const nameEl = document.getElementById('setter-name');
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); nameEl.style.borderColor = 'var(--red)'; return; }
+  nameEl.style.borderColor = '';
+  const overrides = loadUnitStatuses();
+  overrides[name] = status;
+  saveUnitStatuses(overrides);
+  renderUnitGrid();
+  document.querySelectorAll('.status-btn').forEach(function(b) { b.classList.remove('active'); });
+  event.target.classList.add('active');
+  const confirm = document.getElementById('setter-confirm');
+  confirm.textContent = name + ' — ' + status + ' saved.';
+  confirm.style.display = 'block';
+  setTimeout(function() { confirm.style.display = 'none'; event.target.classList.remove('active'); }, 2500);
+}
+
 // ─── INIT ────────────────────────────────────────────────────────────────────────
 checkOuraCallback();
+renderUnitGrid();
 </script>
 </body>
 </html>
